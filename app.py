@@ -3,7 +3,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 
-from data.loader import load_triage_raw, load_closer_raw
+from data.loader import load_triage_raw, load_closer_raw, render_upload_panel
 from processing.triage import process_triage
 from processing.closer import process_closer
 from processing.funnel import kpis, funnel_counts, merge_funnel
@@ -20,8 +20,11 @@ st.set_page_config(
 st.sidebar.title("Dashboard Comercial")
 st.sidebar.caption("Triage + Closers — datos en vivo")
 
-if st.sidebar.button("🔄 Actualizar datos", use_container_width=True):
+render_upload_panel()
+
+if st.sidebar.button("🔄 Recargar datos", use_container_width=True):
     st.cache_data.clear()
+    st.rerun()
 
 # ── Load & process ────────────────────────────────────────────────────────────
 triage_raw = load_triage_raw()
