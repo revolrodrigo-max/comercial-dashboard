@@ -10,20 +10,15 @@ from processing.triage import process_triage
 from processing.closer import process_closer
 from processing.funnel import merge_funnel, kpis
 from config import BRAND_GREEN, BRAND_WHITE, BRAND_GREY, BRAND_BLACK, BRAND_SCALE
+from ui import inject_css, page_header
 
 st.set_page_config(page_title="Insights", page_icon="💡", layout="wide")
+inject_css()
 
-st.markdown("""
-<style>
-[data-testid="stMetricValue"] { color: #C7FF00; font-weight: 700; }
-[data-testid="stMetricLabel"] { color: #6B6969; text-transform: uppercase; font-size:.75rem; }
-</style>
-""", unsafe_allow_html=True)
+_dark = dict(paper_bgcolor="#141414", plot_bgcolor="#141414",
+             font=dict(color=BRAND_WHITE, family="Inter"), margin=dict(l=10, r=10, t=10, b=10))
 
-_dark = dict(paper_bgcolor="#111111", plot_bgcolor="#111111",
-             font=dict(color=BRAND_WHITE), margin=dict(l=0, r=0, t=10, b=0))
-
-st.markdown("<h1 style='color:#FFFFFF'>💡 Insights Automáticos</h1>", unsafe_allow_html=True)
+page_header("Insights Automáticos", "Detección de oportunidades, alertas y patrones de venta")
 
 triage  = process_triage(load_triage_raw())
 closer  = process_closer(load_closer_raw())
@@ -137,7 +132,7 @@ if "califico" in c.columns and "compro" in c.columns:
         cols_show = ["fecha", "lead", "closer", "estado_seguimiento", "notas", "celular", "email"]
         avail = [col for col in cols_show if col in hot.columns]
         st.dataframe(hot[avail].sort_values("fecha", ascending=False),
-                     use_container_width=True, hide_index=True)
+                     width='stretch', hide_index=True)
     else:
         st.success("Todos los leads calificados compraron. 💪")
 
@@ -168,7 +163,7 @@ if "notas" in c.columns:
         fig_words.update_layout(**_dark, height=460,
                                  yaxis=dict(autorange="reversed"),
                                  xaxis=dict(gridcolor="#3A3A3A"))
-        st.plotly_chart(fig_words, use_container_width=True)
+        st.plotly_chart(fig_words, width='stretch')
 
 st.divider()
 
@@ -189,4 +184,4 @@ if not t_f.empty and "ocupacion" in t_f.columns:
     fig_ocup.update_layout(**_dark, height=420,
                             yaxis=dict(autorange="reversed"),
                             xaxis=dict(gridcolor="#3A3A3A"))
-    st.plotly_chart(fig_ocup, use_container_width=True)
+    st.plotly_chart(fig_ocup, width='stretch')

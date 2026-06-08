@@ -1,31 +1,35 @@
 import re
 import pandas as pd
 
-# Columnas principales del tracker de ventas (cols 0-15)
-CLOSER_COLS = {
-    "Fecha":                  "fecha",
-    "Triage":                 "triager",
-    "Nombre Lead":            "lead",
-    "Celular":                "celular",
-    "Mail":                   "email",
-    "Velocidad de contacto":  "vel_contacto",
-    "Closer":                 "closer",
-    "Asiste?":                "asistencia",
-    "Estado del seguimiento": "estado_seguimiento",
-    "Cualifica?":             "califica",
-    "Compra?":                "compra",
-    "Notas":                  "notas",
-    "Monto Abonado (C.C)":    "cash_collected",
-    "Revenue":                "revenue",
-    "Medio de compra":        "medio_pago",
-    "Grabacion":              "link_grabacion",
+# Canonical columns the loader produces for the ventas tracker.
+EXPECTED = [
+    "fecha", "triager", "lead", "celular", "email", "vel_contacto", "closer",
+    "estado_seguimiento", "asistencia", "motivo_cancelacion", "califica",
+    "medio_pago", "compra", "tipo_pago", "cash_collected", "revenue",
+    "link_grabacion", "notas",
+]
+
+# Normalize the handful of closer-name spellings seen across the monthly tabs.
+CLOSER_ALIASES = {
+    "santi capurro":    "Santi Capurro",
+    "santiago capurro": "Santi Capurro",
+    "santi correa":     "Santi Correa",
+    "santiago correa":  "Santi Correa",
+    "santiago":         "Santiago",
+    "santi":            "Santiago",
+    "gianluca":         "Gianluca",
+    "joaquin":          "Joaquin",
+    "rodrigo":          "Rodrigo",
 }
 
 
 def _parse_money(val) -> float:
-    if pd.isna(val) or str(val).strip() in ("", "-", "nan", "#DIV/0!"):
+    if pd.isna(val):
         return 0.0
-    cleaned = re.sub(r"[^\d.]", "", str(val).replace(",", ""))
+    s = str(val).strip()
+    if s in ("", "-", "nan", "#DIV/0!", "#REF!", "#VALUE!"):
+        return 0.0
+    cleaned = re.sub(r"[^\d.]", "", s.replace(",", ""))
     try:
         return float(cleaned)
     except ValueError:
@@ -39,37 +43,54 @@ def _normalize_phone(phone) -> str:
     return digits[-10:] if len(digits) >= 10 else digits
 
 
-def process_closer(df_raw: pd.DataFrame) -> pd.DataFrame:
-    if df_raw.empty:
+def _parse_dates(series: pd.Series) -> pd.Series:
+    """Robust against mixed D/M/Y and M/D/Y across tabs."""
+    d_first = pd.to_datetime(series, errors="coerce", dayfirst=True)
+    d_last = pd.to_datetime(series, errors="coerce", dayfirst=False)
+    lo, hi = pd.Timestamp("2024-01-01"), pd.Timestamp("2027-12-31")
+    ok_first = d_first.between(lo, hi).sum()
+    ok_last = d_last.between(lo, hi).sum()
+    return d_first if ok_first >= ok_last else d_last
+
+
+def _canon_closer(val):
+    if pd.isna(val):
+        return val
+    return CLOSER_ALIASES.get(str(val).strip().lower(), str(val).strip())
+
+
+def process_closer(df_in: pd.DataFrame) -> pd.DataFrame:
+    if df_in.empty:
         return pd.DataFrame()
 
-    # Keep only the main data columns (drop summary columns on the right)
-    main_cols = [c for c in CLOSER_COLS.keys() if c in df_raw.columns]
-    df = df_raw[main_cols].copy()
-    df = df.rename(columns=CLOSER_COLS)
+    df = df_in.copy()
+    for col in EXPECTED:
+        if col not in df.columns:
+            df[col] = pd.NA
 
-    # Drop empty / header rows
-    df = df[df["lead"].notna() & (df["lead"].str.strip() != "")]
-    df = df[~df["lead"].isin(["Nombre Lead", "TOTAL", ""])]
+    # Drop header echoes / totals
+    df = df[df["lead"].notna() & (df["lead"].astype(str).str.strip() != "")]
+    df = df[~df["lead"].astype(str).str.strip().isin(["Nombre Lead", "NOMBRE LEAD", "TOTAL", "Lead"])]
 
-    # Parse date
-    df["fecha"] = pd.to_datetime(df["fecha"], dayfirst=True, errors="coerce")
+    df["fecha"] = _parse_dates(df["fecha"])
     df = df[df["fecha"].notna()]
 
-    # Parse money
+    df["closer"] = df["closer"].apply(_canon_closer)
+
     df["cash_collected"] = df["cash_collected"].apply(_parse_money)
     df["revenue"] = df["revenue"].apply(_parse_money)
 
-    # Boolean flags
-    df["asistio"] = df["asistencia"].str.strip().str.lower().isin({"asiste", "asistio", "asistió"})
-    df["califico"] = df["califica"].str.strip().str.lower() == "califica"
-    df["compro"] = df["compra"].str.strip().str.lower() == "compra"
+    df["asistio"] = df["asistencia"].astype(str).str.strip().str.lower().isin(
+        {"asiste", "asistio", "asistió"}
+    )
+    df["califico"] = df["califica"].astype(str).str.strip().str.lower().isin(
+        {"califica", "cualifica"}
+    )
+    df["compro"] = df["compra"].astype(str).str.strip().str.lower() == "compra"
 
-    # Join keys
     df["phone_key"] = df["celular"].apply(_normalize_phone)
-    df["email_key"] = df["email"].fillna("").str.lower().str.strip()
+    df["email_key"] = df["email"].fillna("").astype(str).str.lower().str.strip()
 
-    # Time helpers
     df["mes"] = df["fecha"].dt.to_period("M").astype(str)
     df["semana"] = df["fecha"].dt.to_period("W").astype(str)
     df["dia_semana"] = df["fecha"].dt.day_name()

@@ -8,20 +8,15 @@ from processing.triage import process_triage
 from processing.closer import process_closer
 from processing.funnel import funnel_counts
 from config import CLOSER_COLORS, PAYMENT_COLORS, BRAND_GREEN, BRAND_WHITE, BRAND_GREY, BRAND_BLACK
+from ui import inject_css, page_header
 
 st.set_page_config(page_title="Pipeline", page_icon="🔄", layout="wide")
+inject_css()
 
-st.markdown("""
-<style>
-[data-testid="stMetricValue"] { color: #C7FF00; font-weight: 700; }
-[data-testid="stMetricLabel"] { color: #6B6969; text-transform: uppercase; font-size:.75rem; }
-</style>
-""", unsafe_allow_html=True)
+_dark = dict(paper_bgcolor="#141414", plot_bgcolor="#141414",
+             font=dict(color=BRAND_WHITE, family="Inter"), margin=dict(l=10, r=10, t=20, b=10))
 
-_dark = dict(paper_bgcolor="#111111", plot_bgcolor="#111111",
-             font=dict(color=BRAND_WHITE), margin=dict(l=0, r=0, t=20, b=0))
-
-st.markdown("<h1 style='color:#FFFFFF'>🔄 Pipeline Interactivo</h1>", unsafe_allow_html=True)
+page_header("Pipeline Interactivo", "Embudo de conversión por etapa y closer")
 
 triage = process_triage(load_triage_raw())
 closer = process_closer(load_closer_raw())
@@ -78,7 +73,7 @@ with col_f:
         connector={"line": {"color": "#3A3A3A", "width": 1}},
     ))
     fig.update_layout(**_dark, height=400)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 with col_rates:
     st.markdown("### Tasas")
@@ -139,7 +134,7 @@ with col_pay:
                 textfont=dict(color=BRAND_BLACK),
             ))
             fig_pay.update_layout(**_dark, height=280)
-            st.plotly_chart(fig_pay, use_container_width=True)
+            st.plotly_chart(fig_pay, width='stretch')
 
 with col_cancel:
     st.subheader("Asistencia — distribución")
@@ -153,7 +148,7 @@ with col_cancel:
         fig_asist.update_layout(**_dark, height=280, showlegend=False,
                                  xaxis=dict(gridcolor="#3A3A3A"),
                                  yaxis=dict(title=""))
-        st.plotly_chart(fig_asist, use_container_width=True)
+        st.plotly_chart(fig_asist, width='stretch')
 
 st.divider()
 
@@ -172,7 +167,7 @@ def show_table(df):
         st.info("Sin registros.")
     else:
         st.dataframe(df[avail].sort_values("fecha", ascending=False),
-                     use_container_width=True, hide_index=True)
+                     width='stretch', hide_index=True)
 
 
 with tab_ag:   show_table(c)

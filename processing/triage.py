@@ -1,18 +1,20 @@
 import re
 import pandas as pd
 
-
-TRIAGE_MAIN_COLS = [
-    "fecha_agenda", "lead", "mail", "telefono", "ocupacion",
-    "confirmacion", "asistencia", "cualifica", "va_a_closing",
-    "seguimiento", "venta", "ticket", "cash_collected", "notas", "closer_triage",
+EXPECTED = [
+    "fecha_agenda", "lead", "mail", "telefono", "ocupacion", "confirmacion",
+    "asistencia", "cualifica", "va_a_closing", "seguimiento", "venta",
+    "ticket", "cash_collected", "notas", "closer_triage",
 ]
 
 
 def _parse_money(val) -> float:
-    if pd.isna(val) or str(val).strip() in ("", "-", "nan", "#REF!"):
+    if pd.isna(val):
         return 0.0
-    cleaned = re.sub(r"[^\d.]", "", str(val).replace(",", ""))
+    s = str(val).strip()
+    if s in ("", "-", "nan", "#REF!", "#DIV/0!", "#VALUE!"):
+        return 0.0
+    cleaned = re.sub(r"[^\d.]", "", s.replace(",", ""))
     try:
         return float(cleaned)
     except ValueError:
@@ -26,41 +28,39 @@ def _normalize_phone(phone) -> str:
     return digits[-10:] if len(digits) >= 10 else digits
 
 
-def process_triage(df_raw: pd.DataFrame) -> pd.DataFrame:
-    if df_raw.empty:
+def _parse_dates(series: pd.Series) -> pd.Series:
+    d_first = pd.to_datetime(series, errors="coerce", dayfirst=True)
+    d_last = pd.to_datetime(series, errors="coerce", dayfirst=False)
+    lo, hi = pd.Timestamp("2024-01-01"), pd.Timestamp("2027-12-31")
+    return d_first if d_first.between(lo, hi).sum() >= d_last.between(lo, hi).sum() else d_last
+
+
+def process_triage(df_in: pd.DataFrame) -> pd.DataFrame:
+    if df_in.empty:
         return pd.DataFrame()
 
-    # Keep only the 15 main data columns
-    ncols = min(15, len(df_raw.columns))
-    df = df_raw.iloc[:, :ncols].copy()
-    df.columns = TRIAGE_MAIN_COLS[:ncols]
+    df = df_in.copy()
+    for col in EXPECTED:
+        if col not in df.columns:
+            df[col] = pd.NA
 
-    # Drop header-like rows and empty rows
-    df = df[df["lead"].notna()]
-    df = df[~df["lead"].isin(["Lead", "LEAD", ""])]
-    df = df[~df["fecha_agenda"].isin(["Fecha de Agenda", "FECHA", ""])]
+    df = df[df["lead"].notna() & (df["lead"].astype(str).str.strip() != "")]
+    df = df[~df["lead"].astype(str).str.strip().isin(["Lead", "LEAD"])]
 
-    # Parse date
-    df["fecha_agenda"] = pd.to_datetime(
-        df["fecha_agenda"], dayfirst=False, errors="coerce"
-    )
+    df["fecha_agenda"] = _parse_dates(df["fecha_agenda"])
     df = df[df["fecha_agenda"].notna()]
 
-    # Parse money
     df["ticket"] = df["ticket"].apply(_parse_money)
     df["cash_collected"] = df["cash_collected"].apply(_parse_money)
 
-    # Boolean funnel flags
-    df["asistio"] = df["asistencia"].str.strip().str.lower() == "asiste"
-    df["califico"] = df["cualifica"].str.strip().str.lower() == "cualifica"
-    df["fue_a_closing"] = df["va_a_closing"].str.strip().str.lower() == "si"
-    df["vendio"] = df["venta"].str.strip().str.lower() == "si"
+    df["asistio"] = df["asistencia"].astype(str).str.strip().str.lower() == "asiste"
+    df["califico"] = df["cualifica"].astype(str).str.strip().str.lower() == "cualifica"
+    df["fue_a_closing"] = df["va_a_closing"].astype(str).str.strip().str.lower() == "si"
+    df["vendio"] = df["venta"].astype(str).str.strip().str.lower() == "si"
 
-    # Join keys
     df["phone_key"] = df["telefono"].apply(_normalize_phone)
-    df["email_key"] = df["mail"].fillna("").str.lower().str.strip()
+    df["email_key"] = df["mail"].fillna("").astype(str).str.lower().str.strip()
 
-    # Month / week helpers
     df["mes"] = df["fecha_agenda"].dt.to_period("M").astype(str)
     df["semana"] = df["fecha_agenda"].dt.to_period("W").astype(str)
     df["dia_semana"] = df["fecha_agenda"].dt.day_name()

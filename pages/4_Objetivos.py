@@ -10,21 +10,15 @@ from data.loader import load_closer_raw
 from processing.closer import process_closer
 from processing.funnel import kpis
 from config import BRAND_GREEN, BRAND_WHITE, BRAND_GREY, BRAND_BLACK
+from ui import inject_css, page_header
 
 st.set_page_config(page_title="Objetivos", page_icon="🎯", layout="wide")
+inject_css()
 
-st.markdown("""
-<style>
-[data-testid="stMetricValue"] { color: #C7FF00; font-weight: 700; }
-[data-testid="stMetricLabel"] { color: #6B6969; text-transform: uppercase; font-size:.75rem; }
-[data-testid="stMetricDelta"] { font-size:.8rem; }
-</style>
-""", unsafe_allow_html=True)
+_dark = dict(paper_bgcolor="#141414", plot_bgcolor="#141414",
+             font=dict(color=BRAND_WHITE, family="Inter"), margin=dict(l=30, r=30, t=50, b=10))
 
-_dark = dict(paper_bgcolor="#111111", plot_bgcolor="#111111",
-             font=dict(color=BRAND_WHITE), margin=dict(l=30, r=30, t=50, b=10))
-
-st.markdown("<h1 style='color:#FFFFFF'>🎯 Objetivos Mensuales</h1>", unsafe_allow_html=True)
+page_header("Objetivos Mensuales", "Carga de metas y seguimiento de avance en tiempo real")
 
 OBJETIVOS_PATH = Path(__file__).parent.parent / "data" / "objetivos.json"
 
@@ -72,7 +66,7 @@ with st.expander("✏️ Cargar / editar objetivos del mes", expanded=not obj):
             obj_close   = st.slider("Tasa de cierre objetivo (%)", 0, 100,
                                     int(obj.get("close_rate", 0.35) * 100))
 
-        if st.form_submit_button("💾 Guardar objetivos", use_container_width=True):
+        if st.form_submit_button("💾 Guardar objetivos", width='stretch'):
             objetivos[sel_month] = {
                 "revenue": obj_revenue, "cash_collected": obj_cash,
                 "ventas": obj_ventas,   "leads": obj_leads,
@@ -150,7 +144,7 @@ with col_gauge:
         },
     ))
     fig_gauge.update_layout(**_dark, height=320)
-    st.plotly_chart(fig_gauge, use_container_width=True)
+    st.plotly_chart(fig_gauge, width='stretch')
 
 with col_proj:
     st.subheader("Proyección fin de mes")
@@ -209,4 +203,4 @@ if hist_data:
         xaxis=dict(gridcolor="#3A3A3A"),
         yaxis=dict(gridcolor="#3A3A3A", title="Revenue USD"),
     )
-    st.plotly_chart(fig_hist, use_container_width=True)
+    st.plotly_chart(fig_hist, width='stretch')

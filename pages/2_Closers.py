@@ -6,20 +6,15 @@ import pandas as pd
 from data.loader import load_closer_raw
 from processing.closer import process_closer
 from config import CLOSER_COLORS, BRAND_GREEN, BRAND_WHITE, BRAND_GREY, BRAND_BLACK
+from ui import inject_css, page_header
 
 st.set_page_config(page_title="Closers", page_icon="👥", layout="wide")
+inject_css()
 
-st.markdown("""
-<style>
-[data-testid="stMetricValue"] { color: #C7FF00; font-weight: 700; }
-[data-testid="stMetricLabel"] { color: #6B6969; text-transform: uppercase; font-size:.75rem; }
-</style>
-""", unsafe_allow_html=True)
+_dark = dict(paper_bgcolor="#141414", plot_bgcolor="#141414",
+             font=dict(color=BRAND_WHITE, family="Inter"), margin=dict(l=10, r=10, t=20, b=10))
 
-_dark = dict(paper_bgcolor="#111111", plot_bgcolor="#111111",
-             font=dict(color=BRAND_WHITE), margin=dict(l=0, r=0, t=20, b=0))
-
-st.markdown("<h1 style='color:#FFFFFF'>👥 Métricas por Closer</h1>", unsafe_allow_html=True)
+page_header("Métricas por Closer", "Rendimiento individual y comparativo del equipo")
 
 closer = process_closer(load_closer_raw())
 
@@ -91,7 +86,7 @@ if "closer" in closer.columns:
         ))
         fig.update_layout(**_dark, height=300, yaxis_tickformat=".0%",
                            yaxis=dict(gridcolor="#3A3A3A"))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
     with col_b:
         st.subheader("Revenue vs. Cash Collected")
@@ -107,7 +102,7 @@ if "closer" in closer.columns:
         fig2.update_layout(**_dark, barmode="group", height=300,
                             legend=dict(bgcolor="#111111"),
                             yaxis=dict(gridcolor="#3A3A3A"))
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width='stretch')
 
     st.divider()
 
@@ -131,7 +126,7 @@ if "closer" in closer.columns:
             xaxis=dict(gridcolor="#3A3A3A"),
             yaxis=dict(gridcolor="#3A3A3A"),
         )
-        st.plotly_chart(fig_trend, use_container_width=True)
+        st.plotly_chart(fig_trend, width='stretch')
 
     st.divider()
 
@@ -142,4 +137,4 @@ if "closer" in closer.columns:
     show_cols = ["fecha", "lead", "asistencia", "califica", "compra",
                  "revenue", "cash_collected", "medio_pago", "estado_seguimiento", "notas"]
     avail = [col for col in show_cols if col in sub.columns]
-    st.dataframe(sub[avail], use_container_width=True, hide_index=True)
+    st.dataframe(sub[avail], width='stretch', hide_index=True)

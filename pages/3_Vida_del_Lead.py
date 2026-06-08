@@ -8,20 +8,15 @@ from processing.triage import process_triage
 from processing.closer import process_closer
 from processing.funnel import merge_funnel
 from config import CLOSER_COLORS, BRAND_GREEN, BRAND_WHITE, BRAND_GREY, BRAND_BLACK
+from ui import inject_css, page_header
 
 st.set_page_config(page_title="Vida del Lead", page_icon="🔗", layout="wide")
+inject_css()
 
-st.markdown("""
-<style>
-[data-testid="stMetricValue"] { color: #C7FF00; font-weight: 700; }
-[data-testid="stMetricLabel"] { color: #6B6969; text-transform: uppercase; font-size:.75rem; }
-</style>
-""", unsafe_allow_html=True)
+_dark = dict(paper_bgcolor="#141414", plot_bgcolor="#141414",
+             font=dict(color=BRAND_WHITE, family="Inter"), margin=dict(l=10, r=10, t=10, b=10))
 
-_dark = dict(paper_bgcolor="#111111", plot_bgcolor="#111111",
-             font=dict(color=BRAND_WHITE), margin=dict(l=0, r=0, t=10, b=0))
-
-st.markdown("<h1 style='color:#FFFFFF'>🔗 Vida del Lead — Triage → Closing</h1>", unsafe_allow_html=True)
+page_header("Vida del Lead", "Trazabilidad triage → closing y tiempos de conversión")
 
 triage = process_triage(load_triage_raw())
 closer = process_closer(load_closer_raw())
@@ -66,7 +61,7 @@ if "dias_triage_a_closing" in merged.columns:
                                 xaxis=dict(gridcolor="#3A3A3A"),
                                 yaxis=dict(gridcolor="#3A3A3A"),
                                 legend=dict(bgcolor="#111111"))
-        st.plotly_chart(fig_hist, use_container_width=True)
+        st.plotly_chart(fig_hist, width='stretch')
 else:
     st.info("No hay suficientes datos cruzados. Verificá que los emails/teléfonos coincidan entre triage y tracker.")
 
@@ -103,7 +98,7 @@ with col_left:
         fig.update_layout(**_dark, height=310, yaxis_tickformat=".0%",
                            yaxis=dict(gridcolor="#3A3A3A"),
                            coloraxis_showscale=False)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
 with col_right:
     st.subheader("Tasa de cierre por día")
@@ -129,7 +124,7 @@ with col_right:
         fig2.update_layout(**_dark, height=310, yaxis_tickformat=".0%",
                             yaxis=dict(gridcolor="#3A3A3A"),
                             coloraxis_showscale=False)
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width='stretch')
 
 st.divider()
 
@@ -181,7 +176,7 @@ if "estado_seguimiento" in merged.columns:
         cols_s = ["fecha","lead","closer","estado_seguimiento","califico","compro","notas"]
         avail  = [col for col in cols_s if col in seg.columns]
         st.dataframe(seg[avail].sort_values("fecha", ascending=False),
-                     use_container_width=True, hide_index=True)
+                     width='stretch', hide_index=True)
         st.caption(f"{len(seg)} leads con seguimiento pendiente")
     else:
         st.success("Sin leads en seguimiento activo para este período.")
