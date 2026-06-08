@@ -1,14 +1,16 @@
-TRIAGE_SHEET_ID = "1K3OJeYdhX7ABCrvlUNJZVJSVEwM5xjhvyi5iQzSz2Tk"
-CLOSER_SHEET_ID = "17jL_xzTBIpJzdZMUuAFJdgkTlbsKnqeDC_08HN0EnsE"
+TRIAGE_SHEET_ID = "1PRJ18j3IQOn2NSEzKzzd7QlCJriqn2K2BK4T2VPEgto"
+CLOSER_SHEET_ID = "1QHYMMjEHnH8_6vJua20vMDy5-dnNGb3iX5io_t5n7ns"
 CACHE_TTL = 300  # seconds
 
 FUNNEL_STAGES = ["Agendados", "Asistieron", "Calificaron", "Compraron"]
 
 CLOSER_COLORS = {
-    "Gianluca": "#4C9BE8",
-    "Santiago": "#E8834C",
-    "Joaquin": "#6FCF97",
-    "Rodrigo": "#BB6BD9",
+    "Santi Capurro": "#4C9BE8",
+    "Santi Correa":  "#E8834C",
+    "Gianluca":      "#6FCF97",
+    "Santiago":      "#BB6BD9",
+    "Joaquin":       "#F2994A",
+    "Rodrigo":       "#9B51E0",
 }
 
 PAYMENT_COLORS = {

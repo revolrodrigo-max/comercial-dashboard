@@ -1,10 +1,20 @@
 import pandas as pd
 import streamlit as st
 from pathlib import Path
+from config import TRIAGE_SHEET_ID, CLOSER_SHEET_ID
 
+CACHE_TTL = 300  # seconds
 DATA_DIR = Path(__file__).parent
 TRIAGE_CACHE = DATA_DIR / "triage_cache.csv"
 CLOSER_CACHE = DATA_DIR / "closer_cache.csv"
+
+
+def _sheet_url(sheet_id: str) -> str:
+    return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
+
+
+def _load_from_url(url: str) -> pd.DataFrame:
+    return pd.read_csv(url, dtype=str)
 
 
 def _load_from_file(path: Path) -> pd.DataFrame:
@@ -14,57 +24,44 @@ def _load_from_file(path: Path) -> pd.DataFrame:
 
 
 def render_upload_panel():
-    """
-    Sidebar panel for uploading CSVs exported from Google Sheets.
-    Saves them locally so the app reloads fast on next run.
-    """
-    with st.sidebar.expander("📂 Actualizar datos", expanded=not TRIAGE_CACHE.exists()):
+    """Fallback upload panel — only shown if the live URL fails."""
+    with st.sidebar.expander("📂 Cargar datos manualmente", expanded=False):
         st.caption(
-            "Exportá cada planilla desde Google Sheets: "
-            "**Archivo → Descargar → CSV** y subí el archivo acá."
+            "Usá esto solo si la carga automática falla. "
+            "Exportá desde Google Sheets: **Archivo → Descargar → CSV**."
         )
-
-        uploaded_triage = st.file_uploader(
-            "Planilla de Triage (.csv)", type="csv", key="up_triage"
-        )
+        uploaded_triage = st.file_uploader("Planilla de Triage (.csv)", type="csv", key="up_triage")
         if uploaded_triage:
             df = pd.read_csv(uploaded_triage, dtype=str)
             df.to_csv(TRIAGE_CACHE, index=False)
             st.success(f"Triage cargado: {len(df)} filas")
             st.cache_data.clear()
 
-        uploaded_closer = st.file_uploader(
-            "Tracker de Closers (.csv)", type="csv", key="up_closer"
-        )
+        uploaded_closer = st.file_uploader("Tracker de Ventas (.csv)", type="csv", key="up_closer")
         if uploaded_closer:
             df = pd.read_csv(uploaded_closer, dtype=str)
             df.to_csv(CLOSER_CACHE, index=False)
             st.success(f"Tracker cargado: {len(df)} filas")
             st.cache_data.clear()
 
-        if TRIAGE_CACHE.exists():
-            import os, datetime
-            mtime = os.path.getmtime(TRIAGE_CACHE)
-            last = datetime.datetime.fromtimestamp(mtime).strftime("%d/%m %H:%M")
-            st.caption(f"Última actualización triage: {last}")
-        if CLOSER_CACHE.exists():
-            import os, datetime
-            mtime = os.path.getmtime(CLOSER_CACHE)
-            last = datetime.datetime.fromtimestamp(mtime).strftime("%d/%m %H:%M")
-            st.caption(f"Última actualización tracker: {last}")
 
-
-@st.cache_data(show_spinner="Cargando triage…")
+@st.cache_data(ttl=CACHE_TTL, show_spinner="Actualizando triage…")
 def load_triage_raw() -> pd.DataFrame:
-    df = _load_from_file(TRIAGE_CACHE)
-    if df.empty:
-        st.warning("Sin datos de triage. Subí el CSV en el panel lateral.", icon="📂")
-    return df
+    try:
+        df = _load_from_url(_sheet_url(TRIAGE_SHEET_ID))
+        df.to_csv(TRIAGE_CACHE, index=False)  # keep local backup
+        return df
+    except Exception as e:
+        st.warning(f"No se pudo cargar triage en vivo ({e}). Usando última copia local.")
+        return _load_from_file(TRIAGE_CACHE)
 
 
-@st.cache_data(show_spinner="Cargando tracker de closers…")
+@st.cache_data(ttl=CACHE_TTL, show_spinner="Actualizando tracker de ventas…")
 def load_closer_raw() -> pd.DataFrame:
-    df = _load_from_file(CLOSER_CACHE)
-    if df.empty:
-        st.warning("Sin datos del tracker. Subí el CSV en el panel lateral.", icon="📂")
-    return df
+    try:
+        df = _load_from_url(_sheet_url(CLOSER_SHEET_ID))
+        df.to_csv(CLOSER_CACHE, index=False)  # keep local backup
+        return df
+    except Exception as e:
+        st.warning(f"No se pudo cargar el tracker en vivo ({e}). Usando última copia local.")
+        return _load_from_file(CLOSER_CACHE)
