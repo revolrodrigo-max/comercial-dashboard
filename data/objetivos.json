@@ -1,0 +1,9 @@
+{
+  "2026-06": {
+    "revenue": 50000,
+    "cash_collected": 40000,
+    "ventas": 20,
+    "show_rate": 0.75,
+    "close_rate": 0.35
+  }
+}
