@@ -5,3 +5,4 @@ __pycache__/
 venv/
 *.egg-info/
 .streamlit/secrets.toml
+data/*_cache.csv
