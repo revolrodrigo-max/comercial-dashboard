@@ -7,43 +7,51 @@ from data.loader import load_triage_raw, load_closer_raw
 from processing.triage import process_triage
 from processing.closer import process_closer
 from processing.funnel import merge_funnel
-from config import CLOSER_COLORS
+from config import CLOSER_COLORS, BRAND_GREEN, BRAND_WHITE, BRAND_GREY, BRAND_BLACK
 
 st.set_page_config(page_title="Vida del Lead", page_icon="🔗", layout="wide")
-st.title("🔗 Vida del Lead — Triage → Closing")
+
+st.markdown("""
+<style>
+[data-testid="stMetricValue"] { color: #C7FF00; font-weight: 700; }
+[data-testid="stMetricLabel"] { color: #6B6969; text-transform: uppercase; font-size:.75rem; }
+</style>
+""", unsafe_allow_html=True)
+
+_dark = dict(paper_bgcolor="#111111", plot_bgcolor="#111111",
+             font=dict(color=BRAND_WHITE), margin=dict(l=0, r=0, t=10, b=0))
+
+st.markdown("<h1 style='color:#FFFFFF'>🔗 Vida del Lead — Triage → Closing</h1>", unsafe_allow_html=True)
 
 triage = process_triage(load_triage_raw())
 closer = process_closer(load_closer_raw())
 merged = merge_funnel(triage, closer)
 
 if merged.empty:
-    st.warning("Sin datos para mostrar el journey.")
+    st.warning("Sin datos.")
     st.stop()
 
-# ── Filters ───────────────────────────────────────────────────────────────────
 col1, col2 = st.columns(2)
 with col1:
-    all_months = sorted(merged["mes"].dropna().unique(), reverse=True) if "mes" in merged else []
-    sel_month = st.selectbox("Mes", ["Todos"] + list(all_months))
+    all_months = sorted(merged["mes"].dropna().unique(), reverse=True) if "mes" in merged.columns else []
+    sel_month  = st.selectbox("Mes", ["Todos"] + list(all_months))
 with col2:
-    all_closers = sorted(merged["closer"].dropna().unique()) if "closer" in merged else []
-    sel_closer = st.multiselect("Closer", all_closers, default=all_closers)
+    all_closers = sorted(merged["closer"].dropna().unique()) if "closer" in merged.columns else []
+    sel_closer  = st.multiselect("Closer", all_closers, default=all_closers)
 
 if sel_month != "Todos" and "mes" in merged.columns:
     merged = merged[merged["mes"] == sel_month]
 if sel_closer and "closer" in merged.columns:
     merged = merged[merged["closer"].isin(sel_closer)]
 
-# ── Time from triage to closing ────────────────────────────────────────────────
+# ── Tiempo de vida del lead ───────────────────────────────────────────────────
 st.subheader("Tiempo de vida del lead (triage → closing)")
-
 if "dias_triage_a_closing" in merged.columns:
     dias_df = merged[merged["dias_triage_a_closing"].notna() & (merged["dias_triage_a_closing"] >= 0)]
-
     col_a, col_b, col_c = st.columns(3)
-    col_a.metric("Tiempo promedio", f"{dias_df['dias_triage_a_closing'].mean():.1f} días")
-    col_b.metric("Tiempo mediano", f"{dias_df['dias_triage_a_closing'].median():.1f} días")
-    col_c.metric("Leads con triage matching", len(dias_df))
+    col_a.metric("Tiempo promedio", f"{dias_df['dias_triage_a_closing'].mean():.1f} días" if not dias_df.empty else "—")
+    col_b.metric("Tiempo mediano",  f"{dias_df['dias_triage_a_closing'].median():.1f} días" if not dias_df.empty else "—")
+    col_c.metric("Leads cruzados",  len(dias_df))
 
     if not dias_df.empty:
         fig_hist = px.histogram(
@@ -53,120 +61,110 @@ if "dias_triage_a_closing" in merged.columns:
             nbins=20,
             labels={"dias_triage_a_closing": "Días desde triage hasta closing"},
         )
-        fig_hist.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0))
+        fig_hist.update_traces(marker_line_color=BRAND_BLACK, marker_line_width=1)
+        fig_hist.update_layout(**_dark, height=300,
+                                xaxis=dict(gridcolor="#3A3A3A"),
+                                yaxis=dict(gridcolor="#3A3A3A"),
+                                legend=dict(bgcolor="#111111"))
         st.plotly_chart(fig_hist, use_container_width=True)
 else:
-    st.info("No hay suficientes datos cruzados para calcular tiempos. Verificá que los emails/teléfonos coincidan entre triage y tracker.")
+    st.info("No hay suficientes datos cruzados. Verificá que los emails/teléfonos coincidan entre triage y tracker.")
 
 st.divider()
 
-# ── Funnel by day of week ─────────────────────────────────────────────────────
+# ── Por día de la semana ──────────────────────────────────────────────────────
+day_order = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+day_names = {"Monday":"Lunes","Tuesday":"Martes","Wednesday":"Miércoles",
+             "Thursday":"Jueves","Friday":"Viernes","Saturday":"Sábado","Sunday":"Domingo"}
+
 col_left, col_right = st.columns(2)
 
 with col_left:
-    st.subheader("Show rate por día de la semana")
+    st.subheader("Show rate por día")
     if "dia_semana" in merged.columns and "asistio" in merged.columns:
-        day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        day_names = {"Monday": "Lunes", "Tuesday": "Martes", "Wednesday": "Miércoles",
-                     "Thursday": "Jueves", "Friday": "Viernes",
-                     "Saturday": "Sábado", "Sunday": "Domingo"}
+        dg = (merged.groupby("dia_semana")
+              .agg(total=("lead","count"), asistieron=("asistio","sum")).reset_index())
+        dg["show_rate"] = dg["asistieron"] / dg["total"]
+        dg["orden"]     = dg["dia_semana"].map(lambda d: day_order.index(d) if d in day_order else 99)
+        dg = dg.sort_values("orden")
+        dg["dia_es"] = dg["dia_semana"].map(day_names)
 
-        day_grp = (
-            merged.groupby("dia_semana")
-            .agg(total=("lead", "count"), asistieron=("asistio", "sum"))
-            .reset_index()
-        )
-        day_grp["show_rate"] = day_grp["asistieron"] / day_grp["total"]
-        day_grp["orden"] = day_grp["dia_semana"].map(lambda d: day_order.index(d) if d in day_order else 99)
-        day_grp = day_grp.sort_values("orden")
-        day_grp["dia_es"] = day_grp["dia_semana"].map(day_names)
-
-        fig_dow = px.bar(
-            day_grp, x="dia_es", y="show_rate",
-            text=day_grp["show_rate"].apply(lambda v: f"{v:.0%}"),
-            color="show_rate",
-            color_continuous_scale="RdYlGn",
-            labels={"dia_es": "", "show_rate": "Show rate"},
-        )
-        fig_dow.update_traces(textposition="outside")
-        fig_dow.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0),
-                               coloraxis_showscale=False, yaxis_tickformat=".0%")
-        st.plotly_chart(fig_dow, use_container_width=True)
+        fig = go.Figure(go.Bar(
+            x=dg["dia_es"], y=dg["show_rate"],
+            text=dg["show_rate"].apply(lambda v: f"{v:.0%}"),
+            textposition="outside",
+            textfont=dict(color=BRAND_WHITE),
+            marker=dict(
+                color=dg["show_rate"],
+                colorscale=[[0, "#3A3A3A"], [1, BRAND_GREEN]],
+                line=dict(color=BRAND_BLACK, width=1),
+            ),
+        ))
+        fig.update_layout(**_dark, height=310, yaxis_tickformat=".0%",
+                           yaxis=dict(gridcolor="#3A3A3A"),
+                           coloraxis_showscale=False)
+        st.plotly_chart(fig, use_container_width=True)
 
 with col_right:
-    st.subheader("Tasa de cierre por día de la semana")
+    st.subheader("Tasa de cierre por día")
     if "dia_semana" in merged.columns and "compro" in merged.columns:
-        close_dow = (
-            merged.groupby("dia_semana")
-            .agg(calificaron=("califico", "sum"), compraron=("compro", "sum"))
-            .reset_index()
-        )
-        close_dow["close_rate"] = close_dow.apply(
-            lambda r: r["compraron"] / r["calificaron"] if r["calificaron"] else 0, axis=1
-        )
-        close_dow["orden"] = close_dow["dia_semana"].map(
-            lambda d: ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"].index(d)
-            if d in ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"] else 99
-        )
-        close_dow = close_dow.sort_values("orden")
-        day_names_map = {"Monday": "Lunes", "Tuesday": "Martes", "Wednesday": "Miércoles",
-                         "Thursday": "Jueves", "Friday": "Viernes",
-                         "Saturday": "Sábado", "Sunday": "Domingo"}
-        close_dow["dia_es"] = close_dow["dia_semana"].map(day_names_map)
+        cg = (merged.groupby("dia_semana")
+              .agg(calificaron=("califico","sum"), compraron=("compro","sum")).reset_index())
+        cg["close_rate"] = cg.apply(lambda r: r["compraron"]/r["calificaron"] if r["calificaron"] >= 2 else 0, axis=1)
+        cg["orden"]  = cg["dia_semana"].map(lambda d: day_order.index(d) if d in day_order else 99)
+        cg = cg.sort_values("orden")
+        cg["dia_es"] = cg["dia_semana"].map(day_names)
 
-        fig_cdow = px.bar(
-            close_dow, x="dia_es", y="close_rate",
-            text=close_dow["close_rate"].apply(lambda v: f"{v:.0%}"),
-            color="close_rate",
-            color_continuous_scale="RdYlGn",
-            labels={"dia_es": "", "close_rate": "Tasa de cierre"},
-        )
-        fig_cdow.update_traces(textposition="outside")
-        fig_cdow.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0),
-                                coloraxis_showscale=False, yaxis_tickformat=".0%")
-        st.plotly_chart(fig_cdow, use_container_width=True)
+        fig2 = go.Figure(go.Bar(
+            x=cg["dia_es"], y=cg["close_rate"],
+            text=cg["close_rate"].apply(lambda v: f"{v:.0%}"),
+            textposition="outside",
+            textfont=dict(color=BRAND_WHITE),
+            marker=dict(
+                color=cg["close_rate"],
+                colorscale=[[0, "#3A3A3A"], [1, BRAND_GREEN]],
+                line=dict(color=BRAND_BLACK, width=1),
+            ),
+        ))
+        fig2.update_layout(**_dark, height=310, yaxis_tickformat=".0%",
+                            yaxis=dict(gridcolor="#3A3A3A"),
+                            coloraxis_showscale=False)
+        st.plotly_chart(fig2, use_container_width=True)
 
 st.divider()
 
-# ── Lead search ───────────────────────────────────────────────────────────────
+# ── Buscador de lead ──────────────────────────────────────────────────────────
 st.subheader("Buscar lead — timeline individual")
-search = st.text_input("Nombre o email del lead")
-
+search = st.text_input("Nombre o email")
 if search:
-    mask = merged["lead"].str.contains(search, case=False, na=False)
+    mask   = merged["lead"].str.contains(search, case=False, na=False)
     if "email_key" in merged.columns:
         mask |= merged["email_key"].str.contains(search, case=False, na=False)
     result = merged[mask]
-
     if result.empty:
-        st.info("No se encontró el lead.")
+        st.info("No encontrado.")
     else:
         for _, row in result.iterrows():
-            with st.expander(f"**{row.get('lead', '?')}** — {row.get('fecha', '').strftime('%d/%m/%Y') if pd.notna(row.get('fecha')) else '?'}"):
+            fecha_str = row["fecha"].strftime("%d/%m/%Y") if pd.notna(row.get("fecha")) else "?"
+            with st.expander(f"**{row.get('lead','?')}** — {fecha_str}"):
                 stages = []
-
                 if "fecha_agenda_t" in row and pd.notna(row["fecha_agenda_t"]):
-                    stages.append(("📅 Agendado (triage)", str(row["fecha_agenda_t"])[:10]))
-                if pd.notna(row.get("fecha")):
-                    stages.append(("📞 Sesión closing", str(row["fecha"])[:10]))
-
-                asistio = row.get("asistio", False)
-                stages.append(("✅ Asistió" if asistio else "❌ No asistió", ""))
-
-                califico = row.get("califico", False)
-                stages.append(("✅ Calificó" if califico else "❌ No calificó", ""))
-
-                compro = row.get("compro", False)
-                stages.append(("🏆 Compró" if compro else "⏳ No compró aún", ""))
-
-                timeline_md = " → ".join([s[0] for s in stages])
-                st.markdown(timeline_md)
-
+                    stages.append(f"📅 Agendado ({str(row['fecha_agenda_t'])[:10]})")
+                stages.append(f"📞 Sesión ({fecha_str})")
+                stages.append("✅ Asistió" if row.get("asistio") else "❌ No asistió")
+                stages.append("✅ Calificó" if row.get("califico") else "❌ No calificó")
+                stages.append("🏆 Compró" if row.get("compro") else "⏳ Sin cierre")
+                st.markdown(
+                    " → ".join(
+                        f"<span style='color:{BRAND_GREEN if '✅' in s or '🏆' in s else (BRAND_WHITE if '📅' in s or '📞' in s else BRAND_GREY)}'>{s}</span>"
+                        for s in stages
+                    ),
+                    unsafe_allow_html=True,
+                )
                 c1, c2, c3 = st.columns(3)
-                c1.write(f"**Closer:** {row.get('closer', '—')}")
-                c2.write(f"**Revenue:** ${row.get('revenue', 0):,.0f}")
-                c3.write(f"**Pago:** {row.get('tipo_pago', '—')}")
-
+                c1.write(f"**Closer:** {row.get('closer','—')}")
+                c2.write(f"**Revenue:** ${row.get('revenue',0):,.0f}")
+                c3.write(f"**Pago:** {row.get('medio_pago','—')}")
                 if row.get("notas"):
                     st.caption(f"Notas: {row['notas']}")
                 if "dias_triage_a_closing" in row and pd.notna(row["dias_triage_a_closing"]):
@@ -177,19 +175,13 @@ st.divider()
 # ── Leads en seguimiento ──────────────────────────────────────────────────────
 st.subheader("Leads en seguimiento activo")
 if "estado_seguimiento" in merged.columns:
-    seguimiento_estados = ["Continuar Seguim", "TRIAGGE - SEGUIMIENTO", "Ampliable"]
-    seguimiento = merged[
-        merged["estado_seguimiento"].str.strip().isin(seguimiento_estados)
-    ].copy()
-
-    if not seguimiento.empty:
-        show_cols = ["fecha", "lead", "closer", "estado_seguimiento",
-                     "califico", "compro", "notas"]
-        avail = [col for col in show_cols if col in seguimiento.columns]
-        st.dataframe(
-            seguimiento[avail].sort_values("fecha", ascending=False),
-            use_container_width=True, hide_index=True
-        )
-        st.caption(f"{len(seguimiento)} leads con seguimiento pendiente")
+    seg_estados = ["Continuar Seguim","TRIAGGE - SEGUIMIENTO","Ampliable"]
+    seg = merged[merged["estado_seguimiento"].str.strip().isin(seg_estados)].copy()
+    if not seg.empty:
+        cols_s = ["fecha","lead","closer","estado_seguimiento","califico","compro","notas"]
+        avail  = [col for col in cols_s if col in seg.columns]
+        st.dataframe(seg[avail].sort_values("fecha", ascending=False),
+                     use_container_width=True, hide_index=True)
+        st.caption(f"{len(seg)} leads con seguimiento pendiente")
     else:
         st.success("Sin leads en seguimiento activo para este período.")

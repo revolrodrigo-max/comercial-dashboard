@@ -3,13 +3,23 @@ import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 
-from data.loader import load_triage_raw, load_closer_raw
-from processing.triage import process_triage
+from data.loader import load_closer_raw
 from processing.closer import process_closer
-from config import CLOSER_COLORS
+from config import CLOSER_COLORS, BRAND_GREEN, BRAND_WHITE, BRAND_GREY, BRAND_BLACK
 
 st.set_page_config(page_title="Closers", page_icon="👥", layout="wide")
-st.title("👥 Métricas por Closer")
+
+st.markdown("""
+<style>
+[data-testid="stMetricValue"] { color: #C7FF00; font-weight: 700; }
+[data-testid="stMetricLabel"] { color: #6B6969; text-transform: uppercase; font-size:.75rem; }
+</style>
+""", unsafe_allow_html=True)
+
+_dark = dict(paper_bgcolor="#111111", plot_bgcolor="#111111",
+             font=dict(color=BRAND_WHITE), margin=dict(l=0, r=0, t=20, b=0))
+
+st.markdown("<h1 style='color:#FFFFFF'>👥 Métricas por Closer</h1>", unsafe_allow_html=True)
 
 closer = process_closer(load_closer_raw())
 
@@ -39,50 +49,48 @@ if "closer" in closer.columns:
         cash=("cash_collected", "sum"),
     ).reset_index()
 
-    grp["show_rate"] = grp["asistieron"] / grp["leads"]
-    grp["calif_rate"] = grp.apply(
-        lambda r: r["calificaron"] / r["asistieron"] if r["asistieron"] else 0, axis=1
-    )
-    grp["close_rate"] = grp.apply(
-        lambda r: r["compraron"] / r["calificaron"] if r["calificaron"] else 0, axis=1
-    )
-    grp["ticket_prom"] = grp.apply(
-        lambda r: r["revenue"] / r["compraron"] if r["compraron"] else 0, axis=1
-    )
+    grp["show_rate"]   = grp["asistieron"] / grp["leads"]
+    grp["calif_rate"]  = grp.apply(lambda r: r["calificaron"] / r["asistieron"] if r["asistieron"] else 0, axis=1)
+    grp["close_rate"]  = grp.apply(lambda r: r["compraron"] / r["calificaron"] if r["calificaron"] else 0, axis=1)
+    grp["ticket_prom"] = grp.apply(lambda r: r["revenue"] / r["compraron"] if r["compraron"] else 0, axis=1)
 
-    # ── KPI cards per closer ──────────────────────────────────────────────────
     cols = st.columns(len(grp))
     for i, row in grp.iterrows():
-        color = CLOSER_COLORS.get(row["closer"], "#888888")
+        color = CLOSER_COLORS.get(row["closer"], BRAND_GREY)
         with cols[i]:
             st.markdown(
-                f"<div style='border-left:4px solid {color};padding:8px 12px'>"
-                f"<b style='font-size:1.1em'>{row['closer']}</b><br>"
-                f"Leads: {row['leads']}<br>"
-                f"Show: {row['show_rate']:.0%} &nbsp;|&nbsp; Cierre: {row['close_rate']:.0%}<br>"
-                f"Revenue: ${row['revenue']:,.0f}<br>"
-                f"Cash: ${row['cash']:,.0f}<br>"
-                f"Ticket prom: ${row['ticket_prom']:,.0f}"
-                f"</div>",
+                f"<div style='border:1px solid {color};border-radius:8px;padding:16px;"
+                f"background:#111111'>"
+                f"<div style='color:{color};font-size:1.1em;font-weight:700'>{row['closer']}</div>"
+                f"<div style='color:#6B6969;font-size:.75rem;margin-bottom:8px'>{int(row['leads'])} leads</div>"
+                f"<div style='display:grid;grid-template-columns:1fr 1fr;gap:4px'>"
+                f"<span style='color:#FFFFFF'>Show</span><span style='color:{color}'>{row['show_rate']:.0%}</span>"
+                f"<span style='color:#FFFFFF'>Cierre</span><span style='color:{color}'>{row['close_rate']:.0%}</span>"
+                f"<span style='color:#FFFFFF'>Revenue</span><span style='color:{color}'>${row['revenue']:,.0f}</span>"
+                f"<span style='color:#FFFFFF'>Cash</span><span style='color:{color}'>${row['cash']:,.0f}</span>"
+                f"<span style='color:#FFFFFF'>Ticket</span><span style='color:{color}'>${row['ticket_prom']:,.0f}</span>"
+                f"</div></div>",
                 unsafe_allow_html=True,
             )
 
     st.divider()
 
-    # ── Comparison bar charts ─────────────────────────────────────────────────
+    # ── Comparison charts ─────────────────────────────────────────────────────
     col_a, col_b = st.columns(2)
 
     with col_a:
-        st.subheader("Tasa de cierre por closer")
-        colors = [CLOSER_COLORS.get(c, "#CCCCCC") for c in grp["closer"]]
+        st.subheader("Tasa de cierre")
+        bar_colors = [CLOSER_COLORS.get(c, BRAND_GREY) for c in grp["closer"]]
         fig = go.Figure(go.Bar(
             x=grp["closer"], y=grp["close_rate"],
-            marker_color=colors,
+            marker_color=bar_colors,
+            marker_line_color=BRAND_BLACK, marker_line_width=1,
             text=grp["close_rate"].apply(lambda v: f"{v:.0%}"),
             textposition="outside",
+            textfont=dict(color=BRAND_WHITE),
         ))
-        fig.update_layout(yaxis_tickformat=".0%", height=300,
-                          margin=dict(l=0, r=0, t=20, b=0))
+        fig.update_layout(**_dark, height=300, yaxis_tickformat=".0%",
+                           yaxis=dict(gridcolor="#3A3A3A"))
         st.plotly_chart(fig, use_container_width=True)
 
     with col_b:
@@ -90,67 +98,48 @@ if "closer" in closer.columns:
         fig2 = go.Figure()
         fig2.add_trace(go.Bar(
             name="Revenue", x=grp["closer"], y=grp["revenue"],
-            marker_color=[CLOSER_COLORS.get(c, "#CCCCCC") for c in grp["closer"]],
+            marker_color=BRAND_GREEN, marker_line_color=BRAND_BLACK, marker_line_width=1,
         ))
         fig2.add_trace(go.Bar(
             name="Cash Collected", x=grp["closer"], y=grp["cash"],
-            marker_color=["#27AE60" for _ in grp["closer"]],
-            opacity=0.7,
+            marker_color=BRAND_GREY, marker_line_color=BRAND_BLACK, marker_line_width=1,
         ))
-        fig2.update_layout(barmode="group", height=300,
-                           margin=dict(l=0, r=0, t=20, b=0))
+        fig2.update_layout(**_dark, barmode="group", height=300,
+                            legend=dict(bgcolor="#111111"),
+                            yaxis=dict(gridcolor="#3A3A3A"))
         st.plotly_chart(fig2, use_container_width=True)
 
     st.divider()
 
-    # ── Trends over time ──────────────────────────────────────────────────────
+    # ── Trend ─────────────────────────────────────────────────────────────────
     st.subheader(f"Tendencia de revenue por {granularity.lower()}")
     group_col = "semana" if granularity == "Semana" else "mes"
-
     if group_col in closer.columns:
         trend = (
             closer[closer["revenue"] > 0]
             .groupby([group_col, "closer"])["revenue"]
-            .sum()
-            .reset_index()
-            .sort_values(group_col)
+            .sum().reset_index().sort_values(group_col)
         )
         fig_trend = px.line(
             trend, x=group_col, y="revenue", color="closer",
-            color_discrete_map=CLOSER_COLORS,
-            markers=True,
+            color_discrete_map=CLOSER_COLORS, markers=True,
             labels={group_col: granularity, "revenue": "Revenue USD"},
         )
-        fig_trend.update_layout(height=350, margin=dict(l=0, r=0, t=20, b=0))
+        fig_trend.update_layout(
+            **_dark, height=350,
+            legend=dict(bgcolor="#111111"),
+            xaxis=dict(gridcolor="#3A3A3A"),
+            yaxis=dict(gridcolor="#3A3A3A"),
+        )
         st.plotly_chart(fig_trend, use_container_width=True)
 
     st.divider()
 
-    # ── Medios de pago por closer ─────────────────────────────────────────────
-    st.subheader("Medios de pago por closer")
-    if "medio_pago" in closer.columns:
-        pay_df = (
-            closer[closer["medio_pago"].notna() & (closer["medio_pago"].str.strip() != "")]
-            .groupby(["closer", "medio_pago"])
-            .size()
-            .reset_index(name="cantidad")
-        )
-        fig_pay = px.bar(
-            pay_df, x="closer", y="cantidad", color="medio_pago",
-            barmode="stack",
-            labels={"cantidad": "Operaciones", "medio_pago": "Medio de pago"},
-        )
-        fig_pay.update_layout(height=320, margin=dict(l=0, r=0, t=20, b=0))
-        st.plotly_chart(fig_pay, use_container_width=True)
-
-    st.divider()
-
-    # ── Full detail table ─────────────────────────────────────────────────────
+    # ── Detail table ──────────────────────────────────────────────────────────
     st.subheader("Detalle por closer")
     sel_c = st.selectbox("Ver detalle de", grp["closer"].tolist())
     sub = closer[closer["closer"] == sel_c].sort_values("fecha", ascending=False)
     show_cols = ["fecha", "lead", "asistencia", "califica", "compra",
-                 "tipo_pago", "revenue", "cash_collected", "medio_pago",
-                 "estado_seguimiento", "notas"]
+                 "revenue", "cash_collected", "medio_pago", "estado_seguimiento", "notas"]
     avail = [col for col in show_cols if col in sub.columns]
     st.dataframe(sub[avail], use_container_width=True, hide_index=True)

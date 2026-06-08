@@ -7,30 +7,39 @@ from data.loader import load_triage_raw, load_closer_raw
 from processing.triage import process_triage
 from processing.closer import process_closer
 from processing.funnel import funnel_counts
-from config import CLOSER_COLORS, PAYMENT_COLORS
+from config import CLOSER_COLORS, PAYMENT_COLORS, BRAND_GREEN, BRAND_WHITE, BRAND_GREY, BRAND_BLACK
 
 st.set_page_config(page_title="Pipeline", page_icon="🔄", layout="wide")
-st.title("🔄 Pipeline Interactivo")
+
+st.markdown("""
+<style>
+[data-testid="stMetricValue"] { color: #C7FF00; font-weight: 700; }
+[data-testid="stMetricLabel"] { color: #6B6969; text-transform: uppercase; font-size:.75rem; }
+</style>
+""", unsafe_allow_html=True)
+
+_dark = dict(paper_bgcolor="#111111", plot_bgcolor="#111111",
+             font=dict(color=BRAND_WHITE), margin=dict(l=0, r=0, t=20, b=0))
+
+st.markdown("<h1 style='color:#FFFFFF'>🔄 Pipeline Interactivo</h1>", unsafe_allow_html=True)
 
 triage = process_triage(load_triage_raw())
 closer = process_closer(load_closer_raw())
 
 # ── Filters ───────────────────────────────────────────────────────────────────
 col1, col2, col3 = st.columns(3)
-
 with col1:
     all_months = sorted(closer["mes"].dropna().unique(), reverse=True) if not closer.empty else []
     sel_month = st.selectbox("Mes", ["Todos"] + list(all_months))
-
 with col2:
     all_closers = sorted(closer["closer"].dropna().unique()) if not closer.empty else []
     sel_closer = st.multiselect("Closer", all_closers, default=all_closers)
-
 with col3:
-    etapa_view = st.selectbox(
-        "Vista de pipeline",
-        ["Todos los leads", "Solo activos (sin resultado)", "Compraron", "No compraron (calificaron)"]
-    )
+    etapa_view = st.selectbox("Vista", [
+        "Todos los leads", "Solo activos (sin resultado)",
+        "Compraron", "No compraron (calificaron)"
+    ])
+
 
 def apply_filters(df):
     if df.empty:
@@ -41,8 +50,8 @@ def apply_filters(df):
         df = df[df["closer"].isin(sel_closer)]
     return df
 
-c = apply_filters(closer)
 
+c = apply_filters(closer)
 if etapa_view == "Compraron":
     c = c[c["compro"] == True]
 elif etapa_view == "No compraron (calificaron)":
@@ -55,7 +64,6 @@ st.caption(f"{len(c)} leads en esta vista")
 # ── Funnel principal ──────────────────────────────────────────────────────────
 st.subheader("Embudo de conversión")
 fc = funnel_counts(c, source="closer")
-
 col_f, col_rates = st.columns([2, 1])
 
 with col_f:
@@ -64,21 +72,22 @@ with col_f:
         x=fc["cantidad"],
         textinfo="value+percent initial+percent previous",
         marker={
-            "color": ["#4C9BE8", "#6FCF97", "#F2C94C", "#27AE60"],
-            "line": {"width": 2, "color": "white"},
+            "color": ["#3A3A3A", "#6B6969", "#9ECC00", BRAND_GREEN],
+            "line": {"width": 1, "color": BRAND_BLACK},
         },
+        connector={"line": {"color": "#3A3A3A", "width": 1}},
     ))
-    fig.update_layout(height=400, margin=dict(l=0, r=0, t=20, b=0))
+    fig.update_layout(**_dark, height=400)
     st.plotly_chart(fig, use_container_width=True)
 
 with col_rates:
-    st.markdown("### Tasas de conversión")
+    st.markdown("### Tasas")
     vals = fc["cantidad"].tolist()
     if len(vals) == 4 and vals[0] > 0:
-        st.metric("Show rate", f"{vals[1]/vals[0]:.1%}", help="Asistieron / Agendados")
-        st.metric("Calificación", f"{vals[2]/vals[1]:.1%}" if vals[1] else "—", help="Calificaron / Asistieron")
-        st.metric("Cierre", f"{vals[3]/vals[2]:.1%}" if vals[2] else "—", help="Compraron / Calificaron")
-        st.metric("Conversión total", f"{vals[3]/vals[0]:.1%}", help="Compraron / Agendados")
+        st.metric("Show rate",        f"{vals[1]/vals[0]:.1%}" if vals[0] else "—")
+        st.metric("Calificación",     f"{vals[2]/vals[1]:.1%}" if vals[1] else "—")
+        st.metric("Cierre",           f"{vals[3]/vals[2]:.1%}" if vals[2] else "—")
+        st.metric("Conversión total", f"{vals[3]/vals[0]:.1%}")
 
 st.divider()
 
@@ -87,71 +96,76 @@ st.subheader("Funnel por closer")
 if not c.empty and "closer" in c.columns:
     closers_list = c["closer"].dropna().unique()
     cols = st.columns(min(len(closers_list), 4))
-
     for i, closer_name in enumerate(closers_list):
         sub = c[c["closer"] == closer_name]
         fc_sub = funnel_counts(sub, source="closer")
-        color = CLOSER_COLORS.get(closer_name, "#AAAAAA")
-
+        color = CLOSER_COLORS.get(closer_name, BRAND_GREY)
+        vals = fc_sub["cantidad"].tolist()
         with cols[i % len(cols)]:
-            st.markdown(f"**{closer_name}** — {len(sub)} leads")
-            vals = fc_sub["cantidad"].tolist()
+            st.markdown(
+                f"<div style='border-left:3px solid {color};padding:10px 14px;"
+                f"background:#111111;border-radius:4px'>"
+                f"<b style='color:{color}'>{closer_name}</b>"
+                f"<span style='color:#6B6969;font-size:.8rem'> — {len(sub)} leads</span></div>",
+                unsafe_allow_html=True,
+            )
             if vals[0] > 0:
+                show_r  = vals[1] / vals[0]
                 close_r = vals[3] / vals[2] if vals[2] else 0
-                show_r = vals[1] / vals[0]
-                st.progress(show_r, text=f"Show {show_r:.0%}")
+                st.progress(show_r,  text=f"Show {show_r:.0%}")
                 st.progress(close_r, text=f"Cierre {close_r:.0%}")
-                rev = sub["revenue"].sum()
-                st.caption(f"Revenue: ${rev:,.0f}")
+                st.caption(f"Revenue: ${sub['revenue'].sum():,.0f}")
 
 st.divider()
 
-# ── Tipos de pago ─────────────────────────────────────────────────────────────
+# ── Tipos de pago / cancelaciones ─────────────────────────────────────────────
 col_pay, col_cancel = st.columns(2)
 
 with col_pay:
     st.subheader("Distribución de pagos")
-    if not c.empty and "tipo_pago" in c.columns:
-        pay = c[c["tipo_pago"].notna() & (c["tipo_pago"].str.strip() != "")]
-        pay_counts = pay["tipo_pago"].value_counts().reset_index()
-        pay_counts.columns = ["tipo", "cantidad"]
-        colors = [PAYMENT_COLORS.get(t, "#CCCCCC") for t in pay_counts["tipo"]]
-        fig_pay = go.Figure(go.Pie(
-            labels=pay_counts["tipo"],
-            values=pay_counts["cantidad"],
-            marker_colors=colors,
-            hole=0.4,
-        ))
-        fig_pay.update_layout(height=280, margin=dict(l=0, r=0, t=10, b=0))
-        st.plotly_chart(fig_pay, use_container_width=True)
+    if not c.empty and "medio_pago" in c.columns:
+        pay = c[c["medio_pago"].notna() & (c["medio_pago"].str.strip() != "")]
+        if not pay.empty:
+            pay_counts = pay["medio_pago"].value_counts().reset_index()
+            pay_counts.columns = ["tipo", "cantidad"]
+            fig_pay = go.Figure(go.Pie(
+                labels=pay_counts["tipo"],
+                values=pay_counts["cantidad"],
+                hole=0.5,
+                marker=dict(
+                    colors=[BRAND_GREEN, BRAND_WHITE, BRAND_GREY, "#3A3A3A"],
+                    line=dict(color=BRAND_BLACK, width=2),
+                ),
+                textfont=dict(color=BRAND_BLACK),
+            ))
+            fig_pay.update_layout(**_dark, height=280)
+            st.plotly_chart(fig_pay, use_container_width=True)
 
 with col_cancel:
-    st.subheader("Motivos de cancelación / no-show")
-    if not c.empty and "motivo_cancelacion" in c.columns:
-        cancel = c[c["motivo_cancelacion"].notna() & (c["motivo_cancelacion"].str.strip() != "")]
-        if not cancel.empty:
-            mc = cancel["motivo_cancelacion"].value_counts().reset_index()
-            mc.columns = ["motivo", "cantidad"]
-            fig_cancel = px.bar(mc, x="cantidad", y="motivo", orientation="h",
-                                color_discrete_sequence=["#EB5757"])
-            fig_cancel.update_layout(height=280, margin=dict(l=0, r=0, t=10, b=0),
-                                     yaxis_title="")
-            st.plotly_chart(fig_cancel, use_container_width=True)
-        else:
-            st.info("Sin cancelaciones en este período.")
+    st.subheader("Asistencia — distribución")
+    if not c.empty and "asistencia" in c.columns:
+        asist = c["asistencia"].dropna().str.strip().value_counts().reset_index()
+        asist.columns = ["estado", "cantidad"]
+        color_map = {"Asiste": BRAND_GREEN, "No asiste": "#3A3A3A",
+                     "Reprograma": BRAND_GREY, "Cancela": "#6B6969"}
+        fig_asist = px.bar(asist, x="cantidad", y="estado", orientation="h",
+                           color="estado", color_discrete_map=color_map)
+        fig_asist.update_layout(**_dark, height=280, showlegend=False,
+                                 xaxis=dict(gridcolor="#3A3A3A"),
+                                 yaxis=dict(title=""))
+        st.plotly_chart(fig_asist, use_container_width=True)
 
 st.divider()
 
-# ── Leads por etapa (tabla interactiva) ───────────────────────────────────────
-st.subheader("Leads por etapa del pipeline")
-
+# ── Tabs por etapa ────────────────────────────────────────────────────────────
+st.subheader("Leads por etapa")
 tab_ag, tab_as, tab_cal, tab_comp, tab_nocomp = st.tabs(
-    ["Agendados", "Asistieron", "Calificaron", "Compraron", "Calificaron pero no compraron"]
+    ["Agendados", "Asistieron", "Calificaron", "Compraron", "Calificaron, no compraron"]
 )
-
 display_cols = ["fecha", "lead", "closer", "asistencia", "califica", "compra",
-                "tipo_pago", "revenue", "cash_collected", "notas", "estado_seguimiento"]
+                "revenue", "cash_collected", "notas", "estado_seguimiento"]
 avail = [col for col in display_cols if col in c.columns]
+
 
 def show_table(df):
     if df.empty:
@@ -160,13 +174,9 @@ def show_table(df):
         st.dataframe(df[avail].sort_values("fecha", ascending=False),
                      use_container_width=True, hide_index=True)
 
-with tab_ag:
-    show_table(c)
-with tab_as:
-    show_table(c[c["asistio"] == True])
-with tab_cal:
-    show_table(c[c["califico"] == True])
-with tab_comp:
-    show_table(c[c["compro"] == True])
-with tab_nocomp:
-    show_table(c[(c["califico"] == True) & (c["compro"] == False)])
+
+with tab_ag:   show_table(c)
+with tab_as:   show_table(c[c["asistio"] == True])
+with tab_cal:  show_table(c[c["califico"] == True])
+with tab_comp: show_table(c[c["compro"] == True])
+with tab_nocomp: show_table(c[(c["califico"] == True) & (c["compro"] == False)])
