@@ -9,10 +9,12 @@ from processing.closer import process_closer
 from processing.funnel import kpis, funnel_counts, merge_funnel
 from config import CLOSER_COLORS, BRAND_GREEN, BRAND_WHITE, BRAND_GREY, BRAND_BLACK
 from ui import inject_css, plotly_theme, page_header, section, SURFACE, MUTED, BORDER
+from auth import require_auth
 
 st.set_page_config(page_title="Dashboard Comercial", page_icon="⚡",
                    layout="wide", initial_sidebar_state="expanded")
 inject_css()
+require_auth()
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 st.sidebar.markdown(

@@ -7,9 +7,11 @@ from data.loader import load_closer_raw
 from processing.closer import process_closer
 from config import CLOSER_COLORS, BRAND_GREEN, BRAND_WHITE, BRAND_GREY, BRAND_BLACK
 from ui import inject_css, page_header
+from auth import require_auth
 
 st.set_page_config(page_title="Closers", page_icon="👥", layout="wide")
 inject_css()
+require_auth()
 
 _dark = dict(paper_bgcolor="#141414", plot_bgcolor="#141414",
              font=dict(color=BRAND_WHITE, family="Inter"), margin=dict(l=10, r=10, t=20, b=10))
